@@ -1,73 +1,88 @@
 # Email-Queue
 
-A small Node.js example project that demonstrates a simple email queue pattern using two processes:
+A small Node.js example that demonstrates an email queue using two processes backed by Redis via BullMQ:
 
-- `server.js` — API that accepts email requests and enqueues them
-- `worker.js` — background worker that dequeues jobs and sends emails
+- `server.js` — HTTP API that accepts email requests and enqueues them
+- `worker.js` — background worker that dequeues jobs and “sends” emails (placeholder)
 
 ## Goals / contract
 
-- Input: JSON payloads representing an email ({ to, subject, text, html?, metadata? }) posted to the server
-- Output: Worker delivers email via configured SMTP (or logs delivery if SMTP not configured)
-- Error modes: the server should validate and reject bad requests; the worker should retry or log failures
+- Input: JSON payloads representing an email (`{ to, subject, body }`) posted to the server
+- Output: Worker processes jobs and logs delivery (replace with real send logic)
+- Error modes: server validates input; worker logs failures (configure retries as needed)
 
 ## Prerequisites
 
-- Node.js (21+ recommended)
-- npm (comes with Node.js)
+- Node.js 18+ (npm included)
+- Redis (local or remote) — required for BullMQ
 
-If the code uses a queue backend (Redis, for example) you'll need that too — check `server.js`/`worker.js` for any specific backend. If not present, the project may use an in-memory queue for demo purposes.
+## Setup
 
-## Quick start (macOS / zsh)
-
-1. Install dependencies
+1) Install dependencies
 
 ```bash
 npm install
 ```
 
-2. Create a `.env` file (or export environment variables). Example `.env` values:
+2) Configure environment (dotenv is loaded automatically by the app). Create `.env` with:
 
 ```bash
-# server
 REDIS_HOST=localhost
 REDIS_PORT=6379
+EMAILS_PER_MINUTE=10
+PORT=3000
 ```
 
-Load the `.env` values in your shell (if you use a tool like `dotenv`, the project may do this for you):
+3) Start services (ensure Redis is running):
 
 ```bash
-export $(cat .env | xargs)
-```
-
-3. Start the server (accepts enqueue requests):
-
-```bash
+# Terminal 1 — API server
 node server.js
-```
 
-4. Start the worker (processes queued emails):
-
-```bash
+# Terminal 2 — background worker
 node worker.js
 ```
 
-## Example: enqueue an email
+## HTTP API
 
-Assuming the server exposes a POST /enqueue endpoint that accepts JSON, here's a curl example:
+- Endpoint: `POST /send/email`
+- Body (JSON):
 
-```bash
-curl -X POST http://localhost:3000/enqueue \
-	-H 'Content-Type: application/json' \
-	-d '{ "to": "recipient@example.com", "subject": "Hello", "text": "This is a test" }'
+```json
+{
+  "to": "recipient@example.com",
+  "subject": "Hello",
+  "body": "This is a test"
+}
 ```
 
-Expected server response: a 200/201 with a job id or queued acknowledgement. The worker should pick up the job and either send the email or log the delivery result.
+Example:
+
+```bash
+curl -X POST http://localhost:3000/send/email \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"recipient@example.com","subject":"Hello","body":"This is a test"}'
+```
+
+Example response (200):
+
+```json
+{
+  "message": "Email queued successfully for recipient@example.com",
+  "queueLength": 0
+}
+```
+
+## Rate limiting
+
+The worker uses BullMQ’s limiter to process up to `EMAILS_PER_MINUTE` jobs per minute (default 10). Adjust via the env var.
 
 ## File overview
 
-- `server.js` — minimal HTTP API that validates email payloads and enqueues jobs
-- `worker.js` — background process that waits for jobs, sends email via SMTP, and handles retries/errors
+- `server.js` — Express API that validates payloads and enqueues jobs in BullMQ
+- `worker.js` — BullMQ worker that processes jobs and logs completion/failure
 - `package.json` — project metadata and dependencies
 
-If you want to adapt this project, consider replacing the queue implementation with Bull (Redis-backed) or Bee-Queue and add durable retries.
+Notes:
+- This project already uses BullMQ with Redis. For durable retries/backoff, configure job `attempts`/`backoff` when adding jobs or use queue-level defaults.
+- Replace the `sendEmail` placeholder in `worker.js` with real email-sending logic (e.g., an SMTP or Google API client).

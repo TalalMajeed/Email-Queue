@@ -13,6 +13,7 @@ const connection = new IORedis({
 async function sendEmail({ to, subject, body }) {
   console.log(`Sending email to: ${to} | Subject: ${subject}`);
   await new Promise((r) => setTimeout(r, 500));
+  //Google API Function will be called here to send email
 }
 
 const worker = new Worker(
